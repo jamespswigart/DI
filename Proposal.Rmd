@@ -1,0 +1,78 @@
+---
+title: "ChallengeProposal"
+author: "James Swigart"
+date: "7/28/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+devtools::install_github('UrbanInstitute/education-data-package-r')
+library(ggplot2)
+```
+
+```{r get data}
+library(educationdata)
+
+ChallengeData2 <- get_education_data(level = 'college-university', 
+                         source = 'ipeds', 
+                         topic = 'admissions-requirements', 
+                         filters = list(year=2000:2015),
+                         add_labels = TRUE,
+                         csv = TRUE)
+```
+
+```{r analysis}
+require(dplyr)
+#subsets data to only state of Illinois results
+#input list of all 4 year schools in Illinois
+target <- c(143118,145619,143288,143358,144005,144351,148496,144892,144962,144971,145336,145354,145372,145497,145725,145813,145646,146339,146612,146667,146676,146719,146825,147013,147129,147244,147341,147660,147679,147776,147703,147767,147828,148016,148131,148405,148487,148627,149222,149231,149505,149514,144050,145600,148654,145637,148584,149639,149772,149781)
+#filters dataframe by target
+IL<-filter(ChallengeData2, unitid %in% target)
+#check to make sure filter worked
+IL
+#filters out schools that don't report ACT or SAT data
+IL2<- IL%>% filter(sat_percent_submitting !="" & act_percent_submitting!="") 
+#sets text data to numeric
+SATnum<-as.numeric(IL2$sat_percent_submitting)
+ACTnum<-as.numeric(IL2$act_percent_submitting)
+```
+
+```{r straight}
+par(mfrow=c(1,2) ,mar=c(4.5,4.5,1,1) ,oma=c(0,0,4,0))
+plot(SATnum, ACTnum ,xlim = ACTlims , cex=.5, col="darkgrey")
+abline(fit.1, col="red")
+
+```
+
+```{r poly}
+#determines which polynomial to use. Previous modeling with nationwide data had 5th polynomial work best
+fit.1=lm(SATnum~ACTnum, data=IL2)
+fit.2=lm(SATnum~poly(ACTnum,2), data=IL2)
+fit.3=lm(SATnum~poly(ACTnum,3), data=IL2)
+fit.4=lm(SATnum~poly(ACTnum,4), data=IL2)
+fit.5=lm(SATnum~poly(ACTnum,5), data=IL2)
+fit.6=lm(SATnum~poly(ACTnum,6), data=IL2)
+anova(fit.1, fit.2, fit.3, fit.4, fit.5, fit.6)
+#based on anova, 3rd degree polynomial fits best
+#Fits polynomial
+fit=lm(SATnum~poly(ACTnum,4), data=IL2)
+coef(summary(fit))
+ACTlims=range(ACTnum)
+ACT.grid=seq(from=ACTlims[1], to=ACTlims[2])
+preds=predict(fit ,newdata=list(ACTnum=ACT.grid) ,se=TRUE)
+se.bands=cbind(preds$fit+2*preds$se.fit ,preds$fit-2*preds$se.fit)
+par(mfrow=c(1,2) ,mar=c(4.5,4.5,1,1) ,oma=c(0,0,4,0))
+plot(SATnum, ACTnum ,xlim = ACTlims , cex=.5, col="darkgrey")
+#adds polynomial line
+lines(ACT.grid, preds$fit , lwd=2, col="blue")
+#adds confidence interval
+matlines(ACT.grid, se.bands, lwd=1, col="blue", lty=3)
+#summary to get SSR of 5th degree polynomial
+summary(fit.3)
+#summary to get SSR straight line
+summary(fit.1)
+#SSR of straight line is less than that of a polynomial
+```
